@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Worktrees CLI - standalone executable
+# Works independently of any active virtual environment
+
+# Resolve symlinks to get the actual script location
+SOURCE="${BASH_SOURCE[0]:-$0}"
+while [[ -L "$SOURCE" ]]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
+
+# Ensure venv exists
+if [[ ! -x "$VENV_PYTHON" ]]; then
+    echo "Setting up worktrees environment..." >&2
+    uv sync --project "$SCRIPT_DIR" >&2
+fi
+
+# Run using project's own Python
+exec "$VENV_PYTHON" -m worktrees "$@"
