@@ -23,13 +23,13 @@ Git worktrees allow you to have multiple branches checked out simultaneously in 
 
 ```bash
 # With uv (recommended)
-uv tool install worktrees
+uv tool install git+https://github.com/msdavid/worktrees.git
 
 # With pip
-pip install worktrees
+pip install git+https://github.com/msdavid/worktrees.git
 
 # With pipx
-pipx install worktrees
+pipx install git+https://github.com/msdavid/worktrees.git
 ```
 
 ## Quick Start
