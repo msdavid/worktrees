@@ -153,7 +153,11 @@ worktrees/
       init_clone.py   # init, clone
       advanced.py     # convert-old, environ, merge
       status.py       # status
-    config.py         # Configuration handling
+      mark.py         # mark, unmark
+      tmux.py         # tmux session management
+      config_cmd.py   # config (AI assistant setup)
+    config.py         # Project configuration handling
+    user_config.py    # Global user/AI configuration
     git.py            # Git operations
     exclusions.py     # ENVIRON file filtering
   tests/              # Test files
@@ -165,10 +169,13 @@ worktrees/
 ## Adding New Commands
 
 1. **Choose the right module**:
-   - `worktree.py`: Core worktree operations
-   - `init_clone.py`: Repository setup
-   - `advanced.py`: Power user features
+   - `worktree.py`: Core worktree operations (add, remove, list, prune)
+   - `init_clone.py`: Repository setup (init, clone)
+   - `advanced.py`: Power user features (convert-old, environ, merge)
    - `status.py`: Status/info commands
+   - `mark.py`: Worktree labeling (mark, unmark)
+   - `tmux.py`: Tmux session management
+   - `config_cmd.py`: AI assistant configuration
    - Or create a new module if it doesn't fit
 
 2. **Implement the command**:

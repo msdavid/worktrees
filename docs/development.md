@@ -14,7 +14,11 @@ src/worktrees/
     init_clone.py     # init, clone commands
     advanced.py       # convert-old, environ, merge commands
     status.py         # status command
+    mark.py           # mark, unmark commands
+    tmux.py           # tmux session management
+    config_cmd.py     # config command (AI assistant setup)
   config.py           # Configuration classes and loading
+  user_config.py      # Global user configuration (AI settings)
   git.py              # Git operations wrapper
   exclusions.py       # Ephemeral file patterns for ENVIRON migration
 ```
@@ -51,14 +55,43 @@ Power user commands:
 
 ### cli/status.py
 
-- `status`: Show current worktree and project info
+- `status`: Show current worktree and project info (including mark)
+
+### cli/mark.py
+
+Worktree labeling commands:
+- `mark`: Set text label on a worktree (stored in `.worktrees.json`)
+- `unmark`: Clear label from a worktree
+- Helper functions: `get_current_worktree_name()`, `get_worktree_names()`
+
+### cli/tmux.py
+
+Tmux session management:
+- `tmux`: Create/attach tmux session for a worktree
+- Auto-activates `.venv` if present
+- Supports multiple sessions per worktree with suffix naming (`name-2`, `name-3`)
+- Detects if inside tmux (uses `switch-client` vs `attach`)
+
+### cli/config_cmd.py
+
+AI assistant configuration:
+- `config`: Interactive wizard for setting up Claude or Gemini CLI
+- Stores settings in `~/.config/worktrees/config.json`
 
 ### config.py
 
 Configuration management:
-- `WorktreesConfig`: Dataclass for `.worktrees.json`
+- `WorktreesConfig`: Dataclass for `.worktrees.json` (includes marks)
 - `find_project_root()`: Locate project root by finding `.worktrees.json`
 - `DEFAULT_SETUP_COMMANDS`: Auto-detect mappings
+
+### user_config.py
+
+Global user configuration:
+- `AIConfig`: Dataclass for AI assistant settings (provider, command, prompt)
+- `UserConfig`: Wrapper stored at `~/.config/worktrees/config.json`
+- Provider defaults for Claude and Gemini CLI
+- Prompt template with `<target-branch>` and `<current-branch>` placeholders
 
 ### git.py
 
@@ -160,7 +193,7 @@ def add(
 
 ```bash
 # Clone
-git clone https://github.com/transparentlyai/worktrees.git
+git clone https://github.com/msdavid/worktrees.git
 cd worktrees
 
 # Create virtual environment and install
@@ -205,10 +238,18 @@ python -m worktrees --help
 ```
 tests/
   __init__.py
-  test_git.py           # Git operations
-  test_git_worktrees.py # Worktree-specific git operations
-  test_config.py        # Configuration loading/saving
-  test_exclusions.py    # Ephemeral file filtering
+  test_git.py               # Core git operations
+  test_git_worktrees.py     # Worktree-specific git operations
+  test_config.py            # Project configuration loading/saving
+  test_user_config.py       # Global user/AI configuration
+  test_exclusions.py        # Ephemeral file filtering
+  test_cli_init.py          # init/clone commands and CLI utilities
+  test_cli_worktree_add.py  # add command with tmux integration
+  test_cli_advanced.py      # convert-old, environ, merge commands
+  test_cli_status.py        # status command
+  test_cli_mark.py          # mark/unmark commands
+  test_cli_tmux.py          # tmux session management
+  test_cli_config.py        # config command (AI setup)
 ```
 
 ### Test Patterns
@@ -319,10 +360,15 @@ def new_command(
 
 1. Update version in `src/worktrees/__init__.py`
 2. Update CHANGELOG (if exists)
-3. Create git tag
-4. Build and publish:
+3. Create git tag:
 
 ```bash
-uv build
-uv publish
+git tag -a v0.x.0 -m "Release v0.x.0"
+git push origin v0.x.0
+```
+
+This project is installed directly from GitHub (not published on PyPI):
+
+```bash
+uv tool install git+https://github.com/msdavid/worktrees.git
 ```

@@ -84,16 +84,16 @@ worktrees status
 | `worktrees` | List all worktrees (default action) |
 | `worktrees init` | Initialize worktrees for current repository |
 | `worktrees clone <url>` | Clone repository as bare with worktrees support |
-| `worktrees add [branch]` | Create a new worktree |
-| `worktrees remove [name]` | Remove a worktree |
-| `worktrees list` | List all worktrees |
-| `worktrees status` | Show current worktree status |
-| `worktrees mark [text]` | Set a mark/label on a worktree |
-| `worktrees unmark` | Clear mark from a worktree |
-| `worktrees prune` | Clean up stale worktree references |
-| `worktrees config` | Configure AI assistant settings |
-| `worktrees merge [branch]` | AI-assisted merge using configured assistant |
+| `worktrees add [branch]` | Create a new worktree (interactive if omitted) |
+| `worktrees remove [name]` | Remove a worktree (interactive if omitted) |
+| `worktrees list` | List all worktrees with name, branch, commit, mark |
+| `worktrees status` | Show current worktree status and mark |
+| `worktrees mark [text]` | Set a mark/label on a worktree (`-w` to target specific) |
+| `worktrees unmark` | Clear mark from a worktree (`-w` to target specific) |
 | `worktrees tmux [name]` | Start/attach tmux session for a worktree |
+| `worktrees prune` | Clean up stale worktree references |
+| `worktrees config` | Configure AI assistant settings (claude/gemini) |
+| `worktrees merge [branch]` | AI-assisted merge using configured assistant |
 | `worktrees environ` | Sync ENVIRON symlinks in current worktree |
 | `worktrees convert-old` | Migrate old bare repo structure to .git/ |
 
@@ -110,7 +110,8 @@ Created by `worktrees init` or `worktrees clone`:
   "setup": {
     "autoDetect": true,
     "commands": []
-  }
+  },
+  "marks": {}
 }
 ```
 
@@ -119,6 +120,7 @@ Created by `worktrees init` or `worktrees clone`:
 | `worktreesDir` | Where worktrees are stored (`.` = project root, or absolute path) |
 | `setup.autoDetect` | Auto-detect setup commands from project files |
 | `setup.commands` | Custom setup commands to run after creating worktrees |
+| `marks` | Labels for worktrees (managed via `worktrees mark`/`unmark`) |
 
 ### Auto-detected setup commands
 
@@ -214,9 +216,12 @@ worktrees add feature/awesome-thing
 
 # Work on feature...
 
-# Merge back to main
+# Merge back to main (AI-assisted)
 cd ~/projects/my-project/main
-worktrees merge feature/awesome-thing --delete-worktree
+worktrees merge feature/awesome-thing
+
+# Clean up when done
+worktrees remove feature-slash-awesome-thing
 ```
 
 ### Code review workflow
@@ -239,23 +244,27 @@ worktrees add hotfix/critical-bug
 
 # Fix, test, deploy...
 
-# Merge to main and clean up
+# Merge to main (AI-assisted) and clean up
 cd ../main
-worktrees merge hotfix/critical-bug --delete-worktree
+worktrees merge hotfix/critical-bug
+worktrees remove hotfix-slash-critical-bug
 ```
 
 ## Advanced
 
-### Merge with cleanup
+### AI-assisted merge
+
+The `merge` command invokes your configured AI assistant (Claude or Gemini) to perform the merge interactively. The AI handles conflicts and guides you through resolution.
 
 ```bash
-# Merge and delete local branch
-worktrees merge feature-x --delete
+# Configure AI assistant first
+worktrees config
 
-# Merge, delete branch AND its worktree
-worktrees merge feature-x --delete-worktree
+# Merge interactively (AI-assisted)
+worktrees merge feature-x
 
-# Interactive: will prompt to delete remote branch too
+# Interactive branch selection
+worktrees merge
 ```
 
 ### Migrating old projects

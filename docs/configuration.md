@@ -19,7 +19,8 @@ The `.worktrees.json` file is created in your project root when you run `worktre
   "setup": {
     "autoDetect": true,
     "commands": []
-  }
+  },
+  "marks": {}
 }
 ```
 
@@ -116,6 +117,17 @@ Custom list of commands to run after creating a worktree. Each command is execut
 - If `commands` is non-empty, it takes precedence over auto-detection
 - If `commands` is empty and `autoDetect` is `true`, auto-detection is used
 - If both are disabled/empty, no setup commands run
+
+#### marks
+
+```json
+"marks": {
+  "main": "production",
+  "feature-x": "ready for review"
+}
+```
+
+A dictionary mapping worktree names to text labels. Managed via `worktrees mark` and `worktrees unmark` commands. Marks are displayed in `worktrees list` and `worktrees status` output.
 
 ---
 

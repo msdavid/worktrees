@@ -8,10 +8,10 @@ Running `worktrees` without any subcommand displays a list of all worktrees in t
 
 ```bash
 $ worktrees
-path                          branch     commit
-~/projects/myapp              (bare)
-~/projects/myapp/main         main       a1b2c3d
-~/projects/myapp/feature-x    feature-x  d4e5f6g
+name            branch     commit   mark
+myapp (bare)
+main            main       a1b2c3d
+feature-x       feature-x  d4e5f6g  ready for review
 ```
 
 ## Commands
@@ -166,9 +166,10 @@ worktrees list
 Alias: Running `worktrees` with no subcommand also lists worktrees.
 
 **Output columns:**
-- `path`: Full path to worktree
-- `branch`: Current branch (or `(bare)`, `(detached)`)
+- `name`: Worktree directory name (bare repo shows `(bare)` suffix)
+- `branch`: Current branch (or `(detached)`)
 - `commit`: Short commit hash
+- `mark`: Label set via `worktrees mark` (if any)
 
 ---
 
@@ -184,6 +185,7 @@ worktrees status
 - Current worktree name and path
 - Current branch
 - Whether there are uncommitted changes
+- Mark (if set)
 - Project root and total worktree count
 
 **Example output:**
@@ -193,6 +195,7 @@ Status
   worktree: main
   branch:   main
   changes:  clean
+  mark:     ready for review
 
 Project
   root:       ~/projects/myapp
@@ -213,20 +216,106 @@ Runs `git worktree prune -v` to remove references to worktrees that no longer ex
 
 ---
 
-### merge
+### mark
 
-Merge a branch into the current branch.
+Set a text label on a worktree.
 
 ```bash
-worktrees merge [branch] [--delete] [--delete-worktree]
+worktrees mark [text...] [--worktree NAME]
 ```
 
 **Arguments:**
-- `branch` (optional): Branch to merge. If omitted, shows interactive selector.
+- `text` (optional, variadic): Mark text. Multiple words are joined with spaces. If omitted, shows the current mark.
 
 **Options:**
-- `--delete, -d`: Delete the merged branch after successful merge
-- `--delete-worktree, -w`: Delete branch AND its worktree (implies `--delete`)
+- `--worktree, -w NAME`: Target a specific worktree by name (defaults to current worktree)
+
+**Behavior:**
+1. Detects the current worktree (by longest matching path)
+2. Sets the mark text in `.worktrees.json`
+3. If no text provided, displays the current mark
+4. Replaces any existing mark
+
+Marks are displayed in `worktrees list` and `worktrees status` output.
+
+**Examples:**
+
+```bash
+# Mark current worktree
+worktrees mark ready for review
+
+# Mark a specific worktree
+worktrees mark -w feature-x in progress
+
+# Show current mark
+worktrees mark
+```
+
+---
+
+### unmark
+
+Clear a mark from a worktree.
+
+```bash
+worktrees unmark [--worktree NAME]
+```
+
+**Options:**
+- `--worktree, -w NAME`: Target a specific worktree by name (defaults to current worktree)
+
+**Examples:**
+
+```bash
+# Clear mark from current worktree
+worktrees unmark
+
+# Clear mark from specific worktree
+worktrees unmark -w feature-x
+```
+
+---
+
+### tmux
+
+Start or attach to a tmux session for a worktree.
+
+```bash
+worktrees tmux [name]
+```
+
+**Arguments:**
+- `name` (optional): Worktree name. If omitted, uses the current worktree.
+
+**Behavior:**
+1. Creates a detached tmux session in the worktree directory
+2. Auto-activates `.venv/bin/activate` if present
+3. If already inside tmux, uses `switch-client` instead of `attach`
+4. Supports multiple sessions per worktree with automatic suffix naming (`name`, `name-2`, `name-3`)
+5. If sessions already exist for the worktree, offers to attach to an existing one or create a new one
+
+**Examples:**
+
+```bash
+# Start tmux for current worktree
+worktrees tmux
+
+# Start tmux for a specific worktree
+worktrees tmux feature-x
+```
+
+---
+
+### merge
+
+AI-assisted merge using a configured assistant (Claude or Gemini).
+
+```bash
+worktrees merge [branch]
+```
+
+**Arguments:**
+- `branch` (optional): Branch to merge. If omitted, shows interactive selector (excludes current branch).
 
 **Requirements:**
 - Must be run from inside a worktree
@@ -234,27 +323,23 @@ worktrees merge [branch] [--delete] [--delete-worktree]
 - Source branch worktree must have all changes committed (if a worktree exists for the source branch)
 
 **Behavior:**
-1. Performs git merge
-2. If conflicts occur, displays conflicting files and abort instructions
-3. If `--delete` or `--delete-worktree`:
-   - Deletes local branch
-   - If worktree exists for branch and `--delete-worktree`, removes it
-   - Prompts to delete remote branch if it exists
+1. Validates AI assistant is configured
+2. If no branch specified, shows interactive selector
+3. Checks source branch worktree for uncommitted changes
+4. Builds command with `<target-branch>` and `<current-branch>` substitution
+5. Invokes the AI assistant interactively to perform the merge and handle conflicts
 
 **Examples:**
 
 ```bash
-# Interactive merge
+# Configure AI assistant first
+worktrees config
+
+# Interactive branch selection
 worktrees merge
 
-# Merge specific branch
+# Merge specific branch (AI-assisted)
 worktrees merge feature/login
-
-# Merge and delete branch
-worktrees merge feature/login --delete
-
-# Merge, delete branch, and remove worktree
-worktrees merge feature/login --delete-worktree
 ```
 
 ---
