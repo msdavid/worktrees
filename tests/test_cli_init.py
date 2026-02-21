@@ -1,6 +1,7 @@
 """Tests for CLI __init__ module functions."""
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -377,3 +378,139 @@ class TestConstants:
         """Test app constant is defined."""
         assert app is not None
         assert app.info.name == "worktrees"
+
+
+class TestInitNonInteractive:
+    """Tests for the --bare/--no-bare and --worktrees-dir options of init."""
+
+    def test_init_bare_converts_to_bare(self, tmp_path):
+        """Test --bare converts to bare repository without questionary prompt."""
+        with (
+            patch("worktrees.config.Path.cwd", return_value=tmp_path),
+            patch(
+                "worktrees.cli.init_clone.is_git_repo", return_value=True
+            ),
+            patch(
+                "worktrees.cli.init_clone.is_bare_repo", return_value=False
+            ),
+            patch(
+                "worktrees.cli.init_clone.has_uncommitted_changes",
+                return_value=False,
+            ),
+            patch(
+                "worktrees.cli.init_clone.get_untracked_gitignored_files",
+                return_value=[],
+            ),
+            patch(
+                "worktrees.cli.init_clone.convert_to_bare",
+                return_value=(tmp_path, "main"),
+            ) as mock_convert,
+            patch("worktrees.cli.init_clone.add_worktree"),
+            patch("questionary.confirm") as mock_confirm,
+        ):
+            result = runner.invoke(app, ["init", "--bare"])
+            assert result.exit_code == 0, result.output
+            mock_convert.assert_called_once_with(tmp_path)
+            mock_confirm.assert_not_called()
+
+    def test_init_no_bare_uses_default_path(self, tmp_path):
+        """Test --no-bare creates config with default ~/.worktrees/repo_name path."""
+        with (
+            patch("worktrees.config.Path.cwd", return_value=tmp_path),
+            patch(
+                "worktrees.cli.init_clone.is_git_repo", return_value=True
+            ),
+            patch(
+                "worktrees.cli.init_clone.is_bare_repo", return_value=False
+            ),
+            patch(
+                "worktrees.cli.init_clone.has_uncommitted_changes",
+                return_value=False,
+            ),
+            patch(
+                "worktrees.cli.init_clone.WorktreesConfig"
+            ) as mock_config_cls,
+            patch("questionary.confirm") as mock_confirm,
+        ):
+            mock_instance = mock_config_cls.return_value
+            result = runner.invoke(app, ["init", "--no-bare"])
+            assert result.exit_code == 0, result.output
+            mock_confirm.assert_not_called()
+            mock_config_cls.assert_called_once()
+            call_kwargs = mock_config_cls.call_args
+            expected_dir = Path.home() / ".worktrees" / tmp_path.name
+            assert call_kwargs.kwargs["worktrees_dir"] == expected_dir
+            assert call_kwargs.kwargs["project_root"] == tmp_path
+
+    def test_init_no_bare_with_worktrees_dir(self, tmp_path):
+        """Test --no-bare --worktrees-dir uses the provided path."""
+        custom_dir = "/tmp/custom"
+        with (
+            patch("worktrees.config.Path.cwd", return_value=tmp_path),
+            patch(
+                "worktrees.cli.init_clone.is_git_repo", return_value=True
+            ),
+            patch(
+                "worktrees.cli.init_clone.is_bare_repo", return_value=False
+            ),
+            patch(
+                "worktrees.cli.init_clone.has_uncommitted_changes",
+                return_value=False,
+            ),
+            patch(
+                "worktrees.cli.init_clone.WorktreesConfig"
+            ) as mock_config_cls,
+            patch("questionary.confirm") as mock_confirm,
+        ):
+            mock_instance = mock_config_cls.return_value
+            result = runner.invoke(
+                app, ["init", "--no-bare", "--worktrees-dir", custom_dir]
+            )
+            assert result.exit_code == 0, result.output
+            mock_confirm.assert_not_called()
+            mock_config_cls.assert_called_once()
+            call_kwargs = mock_config_cls.call_args
+            assert call_kwargs.kwargs["worktrees_dir"] == Path(custom_dir)
+            assert call_kwargs.kwargs["project_root"] == tmp_path
+
+    def test_init_bare_with_worktrees_dir_errors(self, tmp_path):
+        """Test --bare --worktrees-dir produces an error."""
+        with (
+            patch("worktrees.config.Path.cwd", return_value=tmp_path),
+            patch(
+                "worktrees.cli.init_clone.is_git_repo", return_value=True
+            ),
+            patch(
+                "worktrees.cli.init_clone.is_bare_repo", return_value=False
+            ),
+            patch(
+                "worktrees.cli.init_clone.has_uncommitted_changes",
+                return_value=False,
+            ),
+        ):
+            result = runner.invoke(
+                app, ["init", "--bare", "--worktrees-dir", "/tmp/x"]
+            )
+            assert result.exit_code == 1
+            assert "--worktrees-dir cannot be used with --bare" in result.output
+
+    def test_init_neither_bare_prompts(self, tmp_path):
+        """Test init without --bare/--no-bare prompts via questionary.confirm."""
+        with (
+            patch("worktrees.config.Path.cwd", return_value=tmp_path),
+            patch(
+                "worktrees.cli.init_clone.is_git_repo", return_value=True
+            ),
+            patch(
+                "worktrees.cli.init_clone.is_bare_repo", return_value=False
+            ),
+            patch(
+                "worktrees.cli.init_clone.has_uncommitted_changes",
+                return_value=False,
+            ),
+            patch("questionary.confirm") as mock_confirm,
+        ):
+            # Simulate user cancelling the prompt (returns None)
+            mock_confirm.return_value.ask.return_value = None
+            result = runner.invoke(app, ["init"])
+            mock_confirm.assert_called_once()

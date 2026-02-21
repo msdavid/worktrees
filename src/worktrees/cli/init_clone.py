@@ -25,7 +25,22 @@ from worktrees.git import (
 
 
 @app.command()
-def init() -> None:
+def init(
+    bare: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--bare/--no-bare",
+            help="Convert to bare repository (skip prompt)",
+        ),
+    ] = None,
+    worktrees_dir: Annotated[
+        Optional[str],
+        typer.Option(
+            "--worktrees-dir",
+            help="Directory for worktrees (with --no-bare)",
+        ),
+    ] = None,
+) -> None:
     """Initialize worktrees for this repository."""
     cwd = Path.cwd()
 
@@ -83,16 +98,24 @@ def init() -> None:
         err.print("  commit or stash changes before converting to bare")
         raise typer.Exit(1)
 
-    # Ask if user wants to convert to bare
-    err.print()
-    convert = questionary.confirm(
-        "Convert to bare repository? (recommended for worktrees)",
-        default=False,
-        style=STYLE,
-    ).ask()
+    # Validate options
+    if worktrees_dir is not None and bare is True:
+        err.print("[red]error:[/red] --worktrees-dir cannot be used with --bare")
+        raise typer.Exit(1)
 
-    if convert is None:
-        raise typer.Exit(0)
+    # Determine whether to convert to bare
+    if bare is None:
+        err.print()
+        convert = questionary.confirm(
+            "Convert to bare repository? (recommended for worktrees)",
+            default=False,
+            style=STYLE,
+        ).ask()
+
+        if convert is None:
+            raise typer.Exit(0)
+    else:
+        convert = bare
 
     if convert:
         # Convert to bare repository
@@ -152,35 +175,43 @@ def init() -> None:
         repo_name = cwd.name
         default_path = Path.home() / ".worktrees" / repo_name
 
-        err.print()
-        choice = questionary.select(
-            "Where should worktrees be stored?",
-            choices=[
-                questionary.Choice(
-                    f"~/.worktrees/{repo_name} (default)", value="default"
-                ),
-                questionary.Choice("Custom path...", value="custom"),
-            ],
-            style=STYLE,
-        ).ask()
-
-        if choice is None:
-            raise typer.Exit(0)
-
-        if choice == "custom":
-            custom_path = questionary.text(
-                "Enter worktrees directory:",
+        if worktrees_dir is not None:
+            # Path provided via --worktrees-dir
+            storage_dir = Path(worktrees_dir).expanduser()
+        elif bare is False:
+            # --no-bare without --worktrees-dir: use default
+            storage_dir = default_path
+        else:
+            # Interactive: prompt for path
+            err.print()
+            choice = questionary.select(
+                "Where should worktrees be stored?",
+                choices=[
+                    questionary.Choice(
+                        f"~/.worktrees/{repo_name} (default)", value="default"
+                    ),
+                    questionary.Choice("Custom path...", value="custom"),
+                ],
                 style=STYLE,
             ).ask()
-            if not custom_path:
+
+            if choice is None:
                 raise typer.Exit(0)
-            worktrees_dir = Path(custom_path).expanduser()
-        else:
-            worktrees_dir = default_path
+
+            if choice == "custom":
+                custom_path = questionary.text(
+                    "Enter worktrees directory:",
+                    style=STYLE,
+                ).ask()
+                if not custom_path:
+                    raise typer.Exit(0)
+                storage_dir = Path(custom_path).expanduser()
+            else:
+                storage_dir = default_path
 
         # Create config
         config = WorktreesConfig(
-            worktrees_dir=worktrees_dir,
+            worktrees_dir=storage_dir,
             project_root=cwd,
         )
         config.save(cwd)
@@ -188,7 +219,7 @@ def init() -> None:
         err.print()
         err.print("[bold]Initialized[/bold]")
         err.print(f"  config:     [cyan]{WORKTREES_JSON}[/cyan]")
-        err.print(f"  worktrees:  [cyan]{worktrees_dir}[/cyan]")
+        err.print(f"  worktrees:  [cyan]{storage_dir}[/cyan]")
         err.print()
 
 

@@ -550,3 +550,162 @@ class TestWorktreeAddInteractive:
 
                 assert result.exit_code == 1
                 assert "git error" in result.output
+
+
+class TestWorktreeAddNonInteractive:
+    """Tests for --base and --tmux/--no-tmux non-interactive options."""
+
+    def test_add_no_tmux_skips_prompt(self, initialized_project):
+        """Test --no-tmux skips the tmux prompt and shows manual instructions."""
+        worktree_path = initialized_project / "feature"
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch("worktrees.cli.worktree.add_worktree") as mock_add:
+                mock_add.return_value = worktree_path
+                with patch(
+                    "worktrees.cli.worktree.create_environ_symlinks", return_value=[]
+                ):
+                    with patch("questionary.confirm") as mock_confirm:
+                        result = runner.invoke(
+                            app, ["add", "feature", "--no-tmux"]
+                        )
+
+                        assert result.exit_code == 0
+                        mock_confirm.assert_not_called()
+                        assert "Next" in result.output
+                        assert f"cd {worktree_path}" in result.output
+
+    def test_add_tmux_starts_session(self, initialized_project):
+        """Test --tmux creates tmux session without prompting."""
+        worktree_path = initialized_project / "feature"
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch("worktrees.cli.worktree.add_worktree") as mock_add:
+                mock_add.return_value = worktree_path
+                with patch(
+                    "worktrees.cli.worktree.create_environ_symlinks", return_value=[]
+                ):
+                    with patch("questionary.confirm") as mock_confirm:
+                        with patch(
+                            "worktrees.cli.worktree.get_tmux_sessions"
+                        ) as mock_sessions:
+                            mock_sessions.return_value = []
+                            with patch(
+                                "worktrees.cli.worktree.create_tmux_session"
+                            ) as mock_create:
+                                with patch(
+                                    "worktrees.cli.worktree.attach_or_switch"
+                                ) as mock_attach:
+                                    result = runner.invoke(
+                                        app, ["add", "feature", "--tmux"]
+                                    )
+
+                                    assert result.exit_code == 0
+                                    mock_confirm.assert_not_called()
+                                    assert "Created session" in result.output
+                                    mock_create.assert_called_once_with(
+                                        "feature", worktree_path, False
+                                    )
+                                    mock_attach.assert_called_once_with("feature")
+
+    def test_add_base_creates_new_branch(self, initialized_project):
+        """Test --base creates a new branch from the specified base."""
+        worktree_path = initialized_project / "feature-x"
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.worktree.branch_exists"
+            ) as mock_exists:
+                mock_exists.return_value = (False, False)
+                with patch("worktrees.cli.worktree.add_worktree") as mock_add:
+                    mock_add.return_value = worktree_path
+                    with patch(
+                        "worktrees.cli.worktree.create_environ_symlinks",
+                        return_value=[],
+                    ):
+                        with patch("questionary.confirm") as mock_confirm:
+                            mock_confirm.return_value.ask.return_value = False
+
+                            result = runner.invoke(
+                                app, ["add", "feature-x", "--base", "main"]
+                            )
+
+                            assert result.exit_code == 0
+                            mock_add.assert_called_once()
+                            assert mock_add.call_args[1]["create_branch"] is True
+                            assert mock_add.call_args[1]["base_branch"] == "main"
+
+    def test_add_base_requires_branch(self, initialized_project):
+        """Test --base without branch argument shows error."""
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            result = runner.invoke(app, ["add", "--base", "main"])
+
+            assert result.exit_code == 1
+            assert "requires a branch argument" in result.output
+
+    def test_add_base_errors_on_existing_branch(self, initialized_project):
+        """Test --base errors when branch already exists."""
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.worktree.branch_exists"
+            ) as mock_exists:
+                mock_exists.return_value = (True, False)
+
+                result = runner.invoke(
+                    app, ["add", "feature-x", "--base", "main"]
+                )
+
+                assert result.exit_code == 1
+                assert "already exists" in result.output
+
+    def test_add_base_with_no_tmux(self, initialized_project):
+        """Test --base and --no-tmux work together without any prompts."""
+        worktree_path = initialized_project / "feature-x"
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.worktree.branch_exists"
+            ) as mock_exists:
+                mock_exists.return_value = (False, False)
+                with patch("worktrees.cli.worktree.add_worktree") as mock_add:
+                    mock_add.return_value = worktree_path
+                    with patch(
+                        "worktrees.cli.worktree.create_environ_symlinks",
+                        return_value=[],
+                    ):
+                        with patch("questionary.confirm") as mock_confirm:
+                            with patch("questionary.select") as mock_select:
+                                result = runner.invoke(
+                                    app,
+                                    [
+                                        "add",
+                                        "feature-x",
+                                        "--base",
+                                        "main",
+                                        "--no-tmux",
+                                    ],
+                                )
+
+                                assert result.exit_code == 0
+                                mock_confirm.assert_not_called()
+                                mock_select.assert_not_called()
+                                assert "Next" in result.output
+                                assert f"cd {worktree_path}" in result.output
+                                assert mock_add.call_args[1]["create_branch"] is True
+                                assert (
+                                    mock_add.call_args[1]["base_branch"] == "main"
+                                )
+
+    def test_add_base_handles_git_error(self, initialized_project):
+        """Test --base handles GitError from branch_exists."""
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.worktree.branch_exists",
+                side_effect=GitError("network error"),
+            ):
+                result = runner.invoke(
+                    app, ["add", "feature-x", "--base", "main"]
+                )
+
+                assert result.exit_code == 1
+                assert "network error" in result.output

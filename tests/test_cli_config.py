@@ -247,3 +247,227 @@ class TestConfigCommand:
                                     # Verify it saved the default prompt when empty was provided
                                     assert mock_config.ai.prompt == DEFAULT_PROMPT
                                     mock_config.save.assert_called_once()
+
+
+class TestConfigNonInteractive:
+    """Tests for non-interactive config options (--provider, --command, --prompt, --default-prompt)."""
+
+    def test_config_provider_only(self, tmp_path):
+        """Test --provider claude sets provider and saves without questionary."""
+        config_dir = tmp_path / ".config" / "worktrees"
+        config_file = config_dir / "config.json"
+
+        with patch("worktrees.user_config.GLOBAL_CONFIG_DIR", config_dir):
+            with patch("worktrees.user_config.GLOBAL_CONFIG_FILE", config_file):
+                with patch("worktrees.cli.config_cmd.UserConfig") as mock_config_cls:
+                    mock_config = MagicMock()
+                    mock_config.ai.provider = "claude"
+                    mock_config.ai.command = ""
+                    mock_config.ai.prompt = DEFAULT_PROMPT
+                    mock_config.ai.get_effective_command.return_value = (
+                        PROVIDER_DEFAULTS["claude"]["command"]
+                    )
+                    mock_config_cls.load.return_value = mock_config
+
+                    with patch("questionary.select") as mock_select:
+                        with patch("questionary.text") as mock_text:
+                            with patch("questionary.confirm") as mock_confirm:
+                                result = runner.invoke(
+                                    app, ["config", "--provider", "claude"]
+                                )
+                                assert result.exit_code == 0
+                                assert mock_config.ai.provider == "claude"
+                                mock_config.save.assert_called_once()
+                                assert "Configuration saved" in result.output
+                                mock_select.assert_not_called()
+                                mock_text.assert_not_called()
+                                mock_confirm.assert_not_called()
+
+    def test_config_provider_gemini(self, tmp_path):
+        """Test --provider gemini sets provider to gemini."""
+        config_dir = tmp_path / ".config" / "worktrees"
+        config_file = config_dir / "config.json"
+
+        with patch("worktrees.user_config.GLOBAL_CONFIG_DIR", config_dir):
+            with patch("worktrees.user_config.GLOBAL_CONFIG_FILE", config_file):
+                with patch("worktrees.cli.config_cmd.UserConfig") as mock_config_cls:
+                    mock_config = MagicMock()
+                    mock_config.ai.provider = "claude"
+                    mock_config.ai.command = ""
+                    mock_config.ai.prompt = DEFAULT_PROMPT
+                    mock_config.ai.get_effective_command.return_value = (
+                        PROVIDER_DEFAULTS["claude"]["command"]
+                    )
+                    mock_config_cls.load.return_value = mock_config
+
+                    result = runner.invoke(
+                        app, ["config", "--provider", "gemini"]
+                    )
+                    assert result.exit_code == 0
+                    assert mock_config.ai.provider == "gemini"
+                    mock_config.save.assert_called_once()
+
+    def test_config_invalid_provider(self, tmp_path):
+        """Test --provider invalid shows error and exits with code 1."""
+        config_dir = tmp_path / ".config" / "worktrees"
+        config_file = config_dir / "config.json"
+
+        with patch("worktrees.user_config.GLOBAL_CONFIG_DIR", config_dir):
+            with patch("worktrees.user_config.GLOBAL_CONFIG_FILE", config_file):
+                with patch("worktrees.cli.config_cmd.UserConfig") as mock_config_cls:
+                    mock_config = MagicMock()
+                    mock_config_cls.load.return_value = mock_config
+
+                    result = runner.invoke(
+                        app, ["config", "--provider", "invalid"]
+                    )
+                    assert result.exit_code == 1
+                    assert "unknown provider" in result.output
+                    mock_config.save.assert_not_called()
+
+    def test_config_command_only(self, tmp_path):
+        """Test --command sets the AI command path."""
+        config_dir = tmp_path / ".config" / "worktrees"
+        config_file = config_dir / "config.json"
+
+        with patch("worktrees.user_config.GLOBAL_CONFIG_DIR", config_dir):
+            with patch("worktrees.user_config.GLOBAL_CONFIG_FILE", config_file):
+                with patch("worktrees.cli.config_cmd.UserConfig") as mock_config_cls:
+                    mock_config = MagicMock()
+                    mock_config.ai.provider = "claude"
+                    mock_config.ai.command = ""
+                    mock_config.ai.prompt = DEFAULT_PROMPT
+                    mock_config.ai.get_effective_command.return_value = (
+                        "/usr/bin/claude"
+                    )
+                    mock_config_cls.load.return_value = mock_config
+
+                    result = runner.invoke(
+                        app, ["config", "--command", "/usr/bin/claude"]
+                    )
+                    assert result.exit_code == 0
+                    assert mock_config.ai.command == "/usr/bin/claude"
+                    mock_config.save.assert_called_once()
+
+    def test_config_default_prompt(self, tmp_path):
+        """Test --default-prompt sets prompt to DEFAULT_PROMPT."""
+        config_dir = tmp_path / ".config" / "worktrees"
+        config_file = config_dir / "config.json"
+
+        with patch("worktrees.user_config.GLOBAL_CONFIG_DIR", config_dir):
+            with patch("worktrees.user_config.GLOBAL_CONFIG_FILE", config_file):
+                with patch("worktrees.cli.config_cmd.UserConfig") as mock_config_cls:
+                    mock_config = MagicMock()
+                    mock_config.ai.provider = "claude"
+                    mock_config.ai.command = ""
+                    mock_config.ai.prompt = "some old custom prompt"
+                    mock_config.ai.get_effective_command.return_value = (
+                        PROVIDER_DEFAULTS["claude"]["command"]
+                    )
+                    mock_config_cls.load.return_value = mock_config
+
+                    result = runner.invoke(app, ["config", "--default-prompt"])
+                    assert result.exit_code == 0
+                    assert mock_config.ai.prompt == DEFAULT_PROMPT
+                    mock_config.save.assert_called_once()
+
+    def test_config_custom_prompt(self, tmp_path):
+        """Test --prompt sets a custom prompt."""
+        config_dir = tmp_path / ".config" / "worktrees"
+        config_file = config_dir / "config.json"
+
+        with patch("worktrees.user_config.GLOBAL_CONFIG_DIR", config_dir):
+            with patch("worktrees.user_config.GLOBAL_CONFIG_FILE", config_file):
+                with patch("worktrees.cli.config_cmd.UserConfig") as mock_config_cls:
+                    mock_config = MagicMock()
+                    mock_config.ai.provider = "claude"
+                    mock_config.ai.command = ""
+                    mock_config.ai.prompt = DEFAULT_PROMPT
+                    mock_config.ai.get_effective_command.return_value = (
+                        PROVIDER_DEFAULTS["claude"]["command"]
+                    )
+                    mock_config_cls.load.return_value = mock_config
+
+                    result = runner.invoke(
+                        app, ["config", "--prompt", "my custom prompt"]
+                    )
+                    assert result.exit_code == 0
+                    assert mock_config.ai.prompt == "my custom prompt"
+                    mock_config.save.assert_called_once()
+
+    def test_config_prompt_and_default_prompt_exclusive(self, tmp_path):
+        """Test --prompt and --default-prompt together produce a mutually exclusive error."""
+        config_dir = tmp_path / ".config" / "worktrees"
+        config_file = config_dir / "config.json"
+
+        with patch("worktrees.user_config.GLOBAL_CONFIG_DIR", config_dir):
+            with patch("worktrees.user_config.GLOBAL_CONFIG_FILE", config_file):
+                with patch("worktrees.cli.config_cmd.UserConfig") as mock_config_cls:
+                    mock_config = MagicMock()
+                    mock_config_cls.load.return_value = mock_config
+
+                    result = runner.invoke(
+                        app,
+                        ["config", "--prompt", "x", "--default-prompt"],
+                    )
+                    assert result.exit_code == 1
+                    assert "mutually exclusive" in result.output
+                    mock_config.save.assert_not_called()
+
+    def test_config_multiple_options(self, tmp_path):
+        """Test --provider and --command together updates both fields."""
+        config_dir = tmp_path / ".config" / "worktrees"
+        config_file = config_dir / "config.json"
+
+        with patch("worktrees.user_config.GLOBAL_CONFIG_DIR", config_dir):
+            with patch("worktrees.user_config.GLOBAL_CONFIG_FILE", config_file):
+                with patch("worktrees.cli.config_cmd.UserConfig") as mock_config_cls:
+                    mock_config = MagicMock()
+                    mock_config.ai.provider = "claude"
+                    mock_config.ai.command = ""
+                    mock_config.ai.prompt = DEFAULT_PROMPT
+                    mock_config.ai.get_effective_command.return_value = "/bin/gemini"
+                    mock_config_cls.load.return_value = mock_config
+
+                    result = runner.invoke(
+                        app,
+                        [
+                            "config",
+                            "--provider",
+                            "gemini",
+                            "--command",
+                            "/bin/gemini",
+                        ],
+                    )
+                    assert result.exit_code == 0
+                    assert mock_config.ai.provider == "gemini"
+                    assert mock_config.ai.command == "/bin/gemini"
+                    mock_config.save.assert_called_once()
+
+    def test_config_no_questionary_in_non_interactive(self, tmp_path):
+        """Test non-interactive mode never calls questionary."""
+        config_dir = tmp_path / ".config" / "worktrees"
+        config_file = config_dir / "config.json"
+
+        with patch("worktrees.user_config.GLOBAL_CONFIG_DIR", config_dir):
+            with patch("worktrees.user_config.GLOBAL_CONFIG_FILE", config_file):
+                with patch("worktrees.cli.config_cmd.UserConfig") as mock_config_cls:
+                    mock_config = MagicMock()
+                    mock_config.ai.provider = "claude"
+                    mock_config.ai.command = ""
+                    mock_config.ai.prompt = DEFAULT_PROMPT
+                    mock_config.ai.get_effective_command.return_value = (
+                        PROVIDER_DEFAULTS["claude"]["command"]
+                    )
+                    mock_config_cls.load.return_value = mock_config
+
+                    with patch("questionary.select") as mock_select:
+                        with patch("questionary.text") as mock_text:
+                            with patch("questionary.confirm") as mock_confirm:
+                                result = runner.invoke(
+                                    app, ["config", "--provider", "claude"]
+                                )
+                                assert result.exit_code == 0
+                                mock_select.assert_not_called()
+                                mock_text.assert_not_called()
+                                mock_confirm.assert_not_called()

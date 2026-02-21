@@ -52,6 +52,20 @@ def add(
         bool,
         typer.Option("--no-setup", help="Skip setup commands from .worktrees.json"),
     ] = False,
+    base: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base",
+            help="Base branch to create new branch from (requires branch argument)",
+        ),
+    ] = None,
+    tmux: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--tmux/--no-tmux",
+            help="Start tmux session after creation (skip prompt)",
+        ),
+    ] = None,
 ) -> None:
     """Create a new worktree for a branch.
 
@@ -60,6 +74,11 @@ def add(
     """
     config = require_initialized()
     project_root = config.project_root
+
+    # Validate options
+    if base is not None and branch is None:
+        err.print("[red]error:[/red] --base requires a branch argument")
+        raise typer.Exit(1)
 
     # Step 1: Select branch first
     base_branch = None
@@ -157,6 +176,22 @@ def add(
             err.print(f"[red]error:[/red] {e}")
             raise typer.Exit(1)
 
+    elif base is not None:
+        # --base provided: create new branch from base
+        base_branch = base
+        try:
+            local_exists, remote_exists = branch_exists(branch, project_root)
+            if local_exists or remote_exists:
+                location = "locally" if local_exists else "on remote"
+                err.print(
+                    f"[red]error:[/red] branch '{branch}' already exists {location}"
+                )
+                err.print("  use without --base to checkout existing branch")
+                raise typer.Exit(1)
+        except GitError as e:
+            err.print(f"[red]error:[/red] {e}")
+            raise typer.Exit(1)
+
     # At this point branch is guaranteed to be set
     assert branch is not None
 
@@ -248,12 +283,15 @@ def add(
         # Ask about tmux session
         has_venv = (path / ".venv" / "bin" / "activate").exists()
 
-        rprint()
-        start_tmux = questionary.confirm(
-            "Start a tmux session for this worktree?",
-            default=True,
-            style=STYLE,
-        ).ask()
+        if tmux is None:
+            rprint()
+            start_tmux = questionary.confirm(
+                "Start a tmux session for this worktree?",
+                default=True,
+                style=STYLE,
+            ).ask()
+        else:
+            start_tmux = tmux
 
         if start_tmux:
             try:
@@ -300,6 +338,13 @@ def remove(
         bool,
         typer.Option(
             "--force", "-f", help="Force removal even with uncommitted changes"
+        ),
+    ] = False,
+    delete_remaining: Annotated[
+        bool,
+        typer.Option(
+            "--delete-remaining",
+            help="Delete remaining files (e.g., .venv) without prompting",
         ),
     ] = False,
 ) -> None:
@@ -374,7 +419,7 @@ def remove(
             "[yellow]warning:[/yellow] directory has untracked files "
             "(e.g., .venv, .pytest_cache)"
         )
-        if questionary.confirm(
+        if delete_remaining or questionary.confirm(
             "Delete remaining files?", default=False, style=STYLE
         ).ask():
             shutil.rmtree(wt_path)

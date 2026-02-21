@@ -134,6 +134,14 @@ def tmux(
         Optional[str],
         typer.Argument(help="Worktree name (defaults to current)"),
     ] = None,
+    new: Annotated[
+        bool,
+        typer.Option("--new", help="Create a new session (skip prompt)"),
+    ] = False,
+    attach: Annotated[
+        Optional[str],
+        typer.Option("--attach", help="Attach to a specific session (skip prompt)"),
+    ] = None,
 ) -> None:
     """Start or attach to a tmux session for a worktree.
 
@@ -146,8 +154,15 @@ def tmux(
     Examples:
         worktrees tmux main     # Start/attach session for 'main' worktree
         worktrees tmux          # Start/attach session for current worktree
+        worktrees tmux main --new       # Create new session without prompting
+        worktrees tmux main --attach main-2  # Attach to specific session
     """
     config = require_initialized()
+
+    # Validate options
+    if new and attach is not None:
+        err.print("[red]error:[/red] --new and --attach are mutually exclusive")
+        raise typer.Exit(1)
 
     # Resolve worktree name
     if worktree_name is None:
@@ -171,9 +186,25 @@ def tmux(
     # Check for existing sessions
     existing_sessions = get_tmux_sessions(worktree_name)
 
-    if not existing_sessions:
-        # No sessions - create new one
-        session_name = worktree_name
+    if attach is not None:
+        # --attach: directly attach to specified session
+        if attach not in existing_sessions:
+            err.print(f"[red]error:[/red] session '{attach}' not found")
+            if existing_sessions:
+                err.print(f"  available: {', '.join(existing_sessions)}")
+            raise typer.Exit(1)
+        try:
+            attach_or_switch(attach)
+        except subprocess.CalledProcessError as e:
+            err.print(f"[red]error:[/red] tmux operation failed: {e}")
+            raise typer.Exit(1)
+        except FileNotFoundError:
+            err.print("[red]error:[/red] tmux not found")
+            raise typer.Exit(1)
+
+    elif new or not existing_sessions:
+        # --new or no sessions: create new session
+        session_name = get_next_session_name(worktree_name, existing_sessions)
         has_venv = (worktree_path / ".venv" / "bin" / "activate").exists()
 
         try:
@@ -191,6 +222,7 @@ def tmux(
                 "  install tmux: [dim]apt install tmux[/dim] or [dim]brew install tmux[/dim]"
             )
             raise typer.Exit(1)
+
     else:
         # Sessions exist - prompt user
         choices = []

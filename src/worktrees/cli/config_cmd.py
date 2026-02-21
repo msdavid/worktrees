@@ -1,5 +1,7 @@
 """Config command: interactive configuration wizard."""
 
+from typing import Annotated, Optional
+
 import click
 import questionary
 import typer
@@ -9,16 +11,86 @@ from worktrees.user_config import DEFAULT_PROMPT, PROVIDER_DEFAULTS, UserConfig
 
 
 @app.command("config")
-def config_cmd() -> None:
+def config_cmd(
+    provider: Annotated[
+        Optional[str],
+        typer.Option("--provider", help="AI provider (claude or gemini)"),
+    ] = None,
+    command: Annotated[
+        Optional[str],
+        typer.Option("--command", help="Path to AI CLI binary"),
+    ] = None,
+    prompt: Annotated[
+        Optional[str],
+        typer.Option("--prompt", help="Custom prompt text"),
+    ] = None,
+    default_prompt: Annotated[
+        bool,
+        typer.Option("--default-prompt", help="Use the default prompt"),
+    ] = False,
+) -> None:
     """Configure worktrees settings.
 
     Interactive wizard to set up AI assistant preferences for the merge command.
     Configuration is stored globally at ~/.config/worktrees/config.json.
 
+    Pass options (--provider, --command, --prompt, --default-prompt) for
+    non-interactive mode. Only the specified fields are updated.
+
     Examples:
-        worktrees config    # Run the configuration wizard
+        worktrees config                    # Run the configuration wizard
+        worktrees config --provider claude  # Set provider non-interactively
+        worktrees config --default-prompt   # Reset prompt to default
     """
     config = UserConfig.load()
+
+    # Non-interactive mode: if any option is passed, update only those fields
+    non_interactive = any(
+        [provider is not None, command is not None, prompt is not None, default_prompt]
+    )
+
+    if non_interactive:
+        # Validate
+        if prompt is not None and default_prompt:
+            err.print(
+                "[red]error:[/red] --prompt and --default-prompt are mutually exclusive"
+            )
+            raise typer.Exit(1)
+
+        if provider is not None:
+            if provider not in ("claude", "gemini"):
+                err.print(
+                    f"[red]error:[/red] unknown provider '{provider}'"
+                    " (use 'claude' or 'gemini')"
+                )
+                raise typer.Exit(1)
+            config.ai.provider = provider
+
+        if command is not None:
+            config.ai.command = command.strip()
+
+        if default_prompt:
+            config.ai.prompt = DEFAULT_PROMPT
+        elif prompt is not None:
+            config.ai.prompt = prompt.strip() if prompt.strip() else DEFAULT_PROMPT
+
+        config.save()
+
+        err.print()
+        err.print("[green]Configuration saved[/green]")
+        err.print()
+        err.print("[bold]Settings:[/bold]")
+        err.print(f"  provider: [cyan]{config.ai.provider}[/cyan]")
+        err.print(f"  command:  [dim]{config.ai.get_effective_command()}[/dim]")
+        prompt_preview = (
+            config.ai.prompt[:50] + "..."
+            if len(config.ai.prompt) > 50
+            else config.ai.prompt
+        )
+        err.print(f"  prompt:   [dim]{prompt_preview}[/dim]")
+        return
+
+    # Interactive wizard
 
     # Show current settings if configured
     if config.is_configured():

@@ -621,3 +621,138 @@ class TestTmuxCommand:
                             result = runner.invoke(app, ["tmux", "main"])
                             assert result.exit_code == 1
                             assert "tmux not found" in result.output
+
+
+class TestTmuxNonInteractive:
+    """Tests for --new and --attach non-interactive options."""
+
+    def test_new_creates_session_no_existing(self, initialized_project):
+        """Test --new creates session when no existing sessions."""
+        mock_worktrees = [
+            Worktree(path=initialized_project / "main", commit="abc123", branch="main")
+        ]
+        (initialized_project / "main").mkdir()
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.tmux.list_worktrees", return_value=mock_worktrees
+            ):
+                with patch("worktrees.cli.tmux.get_tmux_sessions", return_value=[]):
+                    with patch("worktrees.cli.tmux.create_tmux_session") as mock_create:
+                        with patch(
+                            "worktrees.cli.tmux.attach_or_switch"
+                        ) as mock_attach:
+                            result = runner.invoke(app, ["tmux", "main", "--new"])
+                            assert result.exit_code == 0
+                            assert "Created session" in result.output
+                            assert "main" in result.output
+                            mock_create.assert_called_once()
+                            assert mock_create.call_args[0][0] == "main"
+                            mock_attach.assert_called_once_with("main")
+
+    def test_new_creates_next_session_with_existing(self, initialized_project):
+        """Test --new creates next session name when sessions already exist."""
+        mock_worktrees = [
+            Worktree(path=initialized_project / "main", commit="abc123", branch="main")
+        ]
+        (initialized_project / "main").mkdir()
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.tmux.list_worktrees", return_value=mock_worktrees
+            ):
+                with patch(
+                    "worktrees.cli.tmux.get_tmux_sessions",
+                    return_value=["main", "main-2"],
+                ):
+                    with patch("worktrees.cli.tmux.create_tmux_session") as mock_create:
+                        with patch(
+                            "worktrees.cli.tmux.attach_or_switch"
+                        ) as mock_attach:
+                            result = runner.invoke(app, ["tmux", "main", "--new"])
+                            assert result.exit_code == 0
+                            assert "Created session" in result.output
+                            assert "main-3" in result.output
+                            mock_create.assert_called_once()
+                            assert mock_create.call_args[0][0] == "main-3"
+                            mock_attach.assert_called_once_with("main-3")
+
+    def test_new_and_attach_mutually_exclusive(self, initialized_project):
+        """Test --new and --attach cannot be used together."""
+        mock_worktrees = [
+            Worktree(path=initialized_project / "main", commit="abc123", branch="main")
+        ]
+        (initialized_project / "main").mkdir()
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.tmux.list_worktrees", return_value=mock_worktrees
+            ):
+                result = runner.invoke(
+                    app, ["tmux", "main", "--new", "--attach", "main"]
+                )
+                assert result.exit_code == 1
+                assert "mutually exclusive" in result.output
+
+    def test_attach_to_existing_session(self, initialized_project):
+        """Test --attach attaches to an existing session."""
+        mock_worktrees = [
+            Worktree(path=initialized_project / "main", commit="abc123", branch="main")
+        ]
+        (initialized_project / "main").mkdir()
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.tmux.list_worktrees", return_value=mock_worktrees
+            ):
+                with patch(
+                    "worktrees.cli.tmux.get_tmux_sessions", return_value=["main"]
+                ):
+                    with patch(
+                        "worktrees.cli.tmux.attach_or_switch"
+                    ) as mock_attach:
+                        result = runner.invoke(
+                            app, ["tmux", "main", "--attach", "main"]
+                        )
+                        assert result.exit_code == 0
+                        mock_attach.assert_called_once_with("main")
+
+    def test_attach_to_nonexistent_session(self, initialized_project):
+        """Test --attach errors when session does not exist."""
+        mock_worktrees = [
+            Worktree(path=initialized_project / "main", commit="abc123", branch="main")
+        ]
+        (initialized_project / "main").mkdir()
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.tmux.list_worktrees", return_value=mock_worktrees
+            ):
+                with patch("worktrees.cli.tmux.get_tmux_sessions", return_value=[]):
+                    result = runner.invoke(
+                        app, ["tmux", "main", "--attach", "nonexistent"]
+                    )
+                    assert result.exit_code == 1
+                    assert "not found" in result.output
+
+    def test_attach_shows_available_sessions(self, initialized_project):
+        """Test --attach error includes available sessions."""
+        mock_worktrees = [
+            Worktree(path=initialized_project / "main", commit="abc123", branch="main")
+        ]
+        (initialized_project / "main").mkdir()
+
+        with patch("worktrees.config.Path.cwd", return_value=initialized_project):
+            with patch(
+                "worktrees.cli.tmux.list_worktrees", return_value=mock_worktrees
+            ):
+                with patch(
+                    "worktrees.cli.tmux.get_tmux_sessions",
+                    return_value=["main", "main-2"],
+                ):
+                    result = runner.invoke(
+                        app, ["tmux", "main", "--attach", "nonexistent"]
+                    )
+                    assert result.exit_code == 1
+                    assert "not found" in result.output
+                    assert "available: main, main-2" in result.output

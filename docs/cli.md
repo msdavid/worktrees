@@ -21,8 +21,13 @@ feature-x       feature-x  d4e5f6g  ready for review
 Initialize worktrees for the current repository.
 
 ```bash
-worktrees init
+worktrees init [--bare | --no-bare] [--worktrees-dir PATH]
 ```
+
+**Options:**
+- `--bare`: Convert to bare repository without prompting
+- `--no-bare`: Use external storage without prompting (uses default path unless `--worktrees-dir` is given)
+- `--worktrees-dir PATH`: Directory for worktrees (only with `--no-bare`)
 
 **Behavior:**
 1. Checks if already initialized (`.worktrees.json` exists)
@@ -30,20 +35,25 @@ worktrees init
 3. If already a bare repo, creates config and default branch worktree
 4. If normal repo:
    - Checks for uncommitted changes (blocks if found)
-   - Prompts to convert to bare repository (recommended)
+   - Prompts to convert to bare repository (recommended), or uses `--bare`/`--no-bare` if provided
    - If converting: migrates ENVIRON files, creates bare repo in `.git/`
-   - If not converting: prompts for external worktrees storage location
+   - If not converting: prompts for external worktrees storage location, or uses `--worktrees-dir`/default
 
 **Examples:**
 
 ```bash
-# Initialize in current repo
+# Interactive initialization
 cd my-project
 worktrees init
 
-# Prompted options:
-# - Convert to bare repository? (recommended)
-# - Or choose external storage location
+# Non-interactive: convert to bare
+worktrees init --bare
+
+# Non-interactive: use external storage with default path
+worktrees init --no-bare
+
+# Non-interactive: use external storage with custom path
+worktrees init --no-bare --worktrees-dir ~/my-worktrees/project
 ```
 
 ---
@@ -82,7 +92,7 @@ worktrees clone https://github.com/user/awesome-app.git ~/projects/my-awesome-ap
 Create a new worktree for a branch.
 
 ```bash
-worktrees add [branch] [--name NAME] [--no-setup]
+worktrees add [branch] [--name NAME] [--no-setup] [--base BRANCH] [--tmux | --no-tmux]
 ```
 
 **Arguments:**
@@ -91,6 +101,9 @@ worktrees add [branch] [--name NAME] [--no-setup]
 **Options:**
 - `--name, -n NAME`: Custom name for the worktree directory
 - `--no-setup`: Skip running setup commands
+- `--base BRANCH`: Create a new branch named `branch` from `BRANCH` (requires `branch` argument; errors if branch already exists)
+- `--tmux`: Start a tmux session after creation without prompting
+- `--no-tmux`: Skip tmux session without prompting
 
 **Behavior:**
 1. If no branch specified, shows interactive branch selector:
@@ -101,7 +114,7 @@ worktrees add [branch] [--name NAME] [--no-setup]
 4. Creates worktree directory
 5. Symlinks files from `ENVIRON/` directory
 6. Runs setup commands (unless `--no-setup`)
-7. Displays next steps (cd command with venv activation if applicable)
+7. Prompts to start tmux session (unless `--tmux`/`--no-tmux` is given)
 
 **Examples:**
 
@@ -117,6 +130,12 @@ worktrees add feature/user-auth --name auth
 
 # Skip setup commands
 worktrees add bugfix/issue-123 --no-setup
+
+# Create new branch from main, no tmux prompt
+worktrees add new-feature --base main --no-tmux
+
+# Create worktree and auto-start tmux
+worktrees add main --tmux
 ```
 
 ---
@@ -126,7 +145,7 @@ worktrees add bugfix/issue-123 --no-setup
 Remove a worktree directory.
 
 ```bash
-worktrees remove [name] [--force]
+worktrees remove [name] [--force] [--delete-remaining]
 ```
 
 **Arguments:**
@@ -134,11 +153,13 @@ worktrees remove [name] [--force]
 
 **Options:**
 - `--force, -f`: Force removal even with uncommitted changes
+- `--delete-remaining`: Delete leftover files (e.g., `.venv`, `.pytest_cache`) without prompting
 
 **Behavior:**
 1. Cannot remove worktree you're currently inside
 2. If uncommitted changes exist, prompts for force removal
-3. Removes worktree and displays remaining worktrees
+3. If leftover files remain after git worktree removal, prompts to delete them (unless `--delete-remaining`)
+4. Removes worktree and displays remaining worktrees
 
 **Examples:**
 
@@ -151,6 +172,9 @@ worktrees remove feature-x
 
 # Force remove (ignores uncommitted changes)
 worktrees remove feature-x --force
+
+# Remove and auto-delete leftover files
+worktrees remove feature-x --force --delete-remaining
 ```
 
 ---
@@ -281,18 +305,23 @@ worktrees unmark -w feature-x
 Start or attach to a tmux session for a worktree.
 
 ```bash
-worktrees tmux [name]
+worktrees tmux [name] [--new] [--attach SESSION]
 ```
 
 **Arguments:**
 - `name` (optional): Worktree name. If omitted, uses the current worktree.
+
+**Options:**
+- `--new`: Create a new session without prompting (auto-generates next name)
+- `--attach SESSION`: Attach to a specific session without prompting
+- `--new` and `--attach` are mutually exclusive
 
 **Behavior:**
 1. Creates a detached tmux session in the worktree directory
 2. Auto-activates `.venv/bin/activate` if present
 3. If already inside tmux, uses `switch-client` instead of `attach`
 4. Supports multiple sessions per worktree with automatic suffix naming (`name`, `name-2`, `name-3`)
-5. If sessions already exist for the worktree, offers to attach to an existing one or create a new one
+5. If sessions already exist for the worktree, offers to attach to an existing one or create a new one (unless `--new`/`--attach` is given)
 
 **Examples:**
 
@@ -302,6 +331,12 @@ worktrees tmux
 
 # Start tmux for a specific worktree
 worktrees tmux feature-x
+
+# Create new session without prompting
+worktrees tmux main --new
+
+# Attach to a specific session
+worktrees tmux main --attach main-2
 ```
 
 ---
@@ -381,14 +416,19 @@ worktrees environ --remove-stale
 Configure AI assistant settings for the merge command.
 
 ```bash
-worktrees config
+worktrees config [--provider {claude,gemini}] [--command PATH] [--prompt TEXT] [--default-prompt]
 ```
 
+**Options:**
+- `--provider {claude,gemini}`: Set AI provider
+- `--command PATH`: Set path to AI CLI binary
+- `--prompt TEXT`: Set custom prompt text
+- `--default-prompt`: Reset prompt to default
+- `--prompt` and `--default-prompt` are mutually exclusive
+
 **Behavior:**
-Interactive wizard that prompts for:
-1. **AI Provider**: Choose between Claude or Gemini CLI
-2. **Binary path**: Custom path to the AI CLI executable (or use default)
-3. **Prompt**: Use the default merge prompt or customize via your `$EDITOR`
+- **Without options**: Interactive wizard that prompts for provider, binary path, and prompt
+- **With options**: Non-interactive mode. Only the specified fields are updated; the wizard is skipped entirely.
 
 Configuration is stored globally at `~/.config/worktrees/config.json`.
 
